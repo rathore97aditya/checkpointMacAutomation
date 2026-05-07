@@ -1,0 +1,88 @@
+#!/bin/zsh
+# vpn-connect — log into Check Point VPN using credentials in macOS Keychain.
+#
+# Reads from Keychain (account=default for all):
+#   checkpoint-vpn-site   VPN gateway hostname (e.g. vpn.example.com)
+#   checkpoint-vpn-user   LDAP username
+#   checkpoint-vpn-pass   LDAP password
+#   checkpoint-vpn-totp   base32 TOTP secret
+#
+# Site is configured for challenge-response: trac prompts for OTP after
+# password is accepted. We drive it via expect, watching for the OTP prompt.
+#
+# Logs everything to ~/.vpn-connect.log. Shows a macOS notification on result.
+#
+# Exit codes:
+#   0   success (or already connected)
+#   10  trac CLI not installed
+#   11  oathtool not installed
+#   12  expect not installed
+#   20  username missing from Keychain
+#   21  password missing from Keychain
+#   22  TOTP secret missing from Keychain
+#   23  site missing from Keychain
+#   99  connect attempted but did not succeed
+
+set -u
+LOG="$HOME/.vpn-connect.log"
+TRAC="/Library/Application Support/Checkpoint/Endpoint Connect/trac"
+
+log()    { print -r -- "[$(date '+%F %T')] $*" >> "$LOG"; print -r -- "$*"; }
+notify() { osascript -e "display notification \"$1\" with title \"Check Point VPN\"" >/dev/null 2>&1 || true; }
+
+[[ -x "$TRAC" ]] || { log "FATAL: trac CLI missing at $TRAC"; notify "trac CLI missing"; exit 10; }
+command -v oathtool >/dev/null || { log "FATAL: oathtool not installed (brew install oath-toolkit)"; notify "oathtool missing"; exit 11; }
+command -v expect   >/dev/null || { log "FATAL: expect not installed (brew install expect)"; notify "expect missing"; exit 12; }
+
+# Pull config + creds from Keychain.
+SITE=$(security find-generic-password -s checkpoint-vpn-site -a default -w 2>/dev/null) \
+  || { log "FATAL: site not in Keychain (service: checkpoint-vpn-site). Re-run install.sh."; notify "Site missing"; exit 23; }
+USR=$(security find-generic-password -s checkpoint-vpn-user -a default -w 2>/dev/null) \
+  || { log "FATAL: username not in Keychain"; notify "Username missing"; exit 20; }
+
+# Already connected? bail clean.
+if "$TRAC" info -s "$SITE" 2>/dev/null | grep -q "status: Connected"; then
+  log "Already connected to $SITE — nothing to do."
+  notify "Already connected"
+  exit 0
+fi
+
+PASS=$(security find-generic-password -s checkpoint-vpn-pass -a default -w 2>/dev/null) \
+  || { log "FATAL: password not in Keychain"; notify "Password missing"; exit 21; }
+SECRET=$(security find-generic-password -s checkpoint-vpn-totp -a default -w 2>/dev/null) \
+  || { log "FATAL: TOTP secret not in Keychain"; notify "TOTP secret missing"; exit 22; }
+
+OTP=$(oathtool --totp -b "$SECRET")
+log "Connecting to $SITE as $USR (OTP: ${OTP:0:2}****)"
+
+# Drive trac with expect: send password as -p arg, then answer the OTP challenge prompt.
+/usr/bin/env expect <<EXPECT >> "$LOG" 2>&1
+log_user 1
+set timeout 45
+spawn -noecho "$TRAC" connect -s "$SITE" -u "$USR" -p "$PASS"
+expect {
+  -re "(?i)challenge.*otp|enter.*time-based|google authenticator|enter.*code|enter.*passcode|response:|otp:" {
+    send -- "$OTP\r"
+    exp_continue
+  }
+  -re "(?i)successfully established|connection.*established" { exit 0 }
+  -re "(?i)access denied|wrong user|invalid|fail" { exit 1 }
+  timeout { exit 2 }
+  eof
+}
+EXPECT
+RC=$?
+log "expect exit=$RC"
+
+sleep 2
+if "$TRAC" info -s "$SITE" 2>/dev/null | grep -q "status: Connected"; then
+  log "SUCCESS"
+  unset PASS SECRET OTP
+  notify "Connected"
+  exit 0
+fi
+
+unset PASS SECRET OTP
+log "FAILED — see full log at $LOG"
+notify "Connect failed — see ~/.vpn-connect.log"
+exit 99

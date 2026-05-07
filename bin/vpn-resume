@@ -1,0 +1,5 @@
+#!/bin/zsh
+# Re-enable auto-reconnect.
+rm -f "$HOME/.vpn-disabled"
+echo "Auto-reconnect resumed."
+osascript -e 'display notification "Auto-reconnect resumed" with title "Check Point VPN"' >/dev/null 2>&1 || true

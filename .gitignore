@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local credentials / sensitive — should never appear here, but defense in depth
+*.png
+*.jpg
+*.jpeg
+*-secret*
+*-password*
+*.totp
+.vpn-connect.log
+.vpn-keepalive.*.log
+.vpn-disabled

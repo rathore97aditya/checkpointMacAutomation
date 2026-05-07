@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchAgent template for vpn-connect auto-reconnect.
+  install.sh substitutes __USER__ and __HOME__ with the actual values
+  before writing this to ~/Library/LaunchAgents/.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.__USER__.vpn-keepalive</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>-c</string>
+        <string>[ -f "$HOME/.vpn-disabled" ] || "$HOME/bin/vpn-connect" &gt;/dev/null 2&gt;&amp;1</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>120</integer>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>__HOME__</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>__HOME__/.vpn-keepalive.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__HOME__/.vpn-keepalive.stderr.log</string>
+
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+</dict>
+</plist>

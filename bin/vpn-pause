@@ -1,0 +1,6 @@
+#!/bin/zsh
+# Pause auto-reconnect (e.g., when at home / on personal network).
+# Re-enable with: vpn-resume
+touch "$HOME/.vpn-disabled"
+echo "Auto-reconnect paused. Run 'vpn-resume' to re-enable."
+osascript -e 'display notification "Auto-reconnect paused" with title "Check Point VPN"' >/dev/null 2>&1 || true
